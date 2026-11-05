@@ -402,7 +402,7 @@ const BookHotelPage = () => {
 
                 <div className="relative group cursor-pointer">
                   <img
-                    src="https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=800"
+                    src="https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800"
                     alt="Hotel Amenity"
                     className="w-full h-[152px] object-cover rounded-lg"
                   />
