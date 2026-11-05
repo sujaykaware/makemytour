@@ -140,7 +140,7 @@ export default function SeatSelection({
       }
 
       if (userId) {
-        void savePreferences(userId, { seatType: something } as any);
+        void savePreferences(userId, { seatType: type } as any);
       }
 
       setPreferredType(type);
