@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useSelector } from "react-redux";
+
+const API_URL = "http://localhost:8080";
 
 type Reply = {
   userName: string;
   text: string;
+  createdAt?: string;
 };
 
 type Review = {
@@ -15,6 +19,7 @@ type Review = {
   photoUrl?: string;
   helpfulCount: number;
   flagged: boolean;
+  removed?: boolean;
   replies: Reply[];
   createdAt: string;
 };
@@ -24,72 +29,107 @@ type Props = {
   itemType: "HOTEL" | "FLIGHT";
 };
 
-export default function ReviewSection({
-  itemId,
-  itemType,
-}: Props) {
+function RatingStars({
+  value,
+  interactive = false,
+  onChange,
+}: {
+  value: number;
+  interactive?: boolean;
+  onChange?: (rating: number) => void;
+}) {
+  const safeRating = Math.max(0, Math.min(5, Number(value) || 0));
+
+  return (
+    <div
+      className="flex items-center gap-1"
+      aria-label={`Rating: ${safeRating} out of 5`}
+    >
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          disabled={!interactive}
+          onClick={() => onChange?.(star)}
+          aria-label={`Select ${star} star${star === 1 ? "" : "s"}`}
+          aria-pressed={interactive ? safeRating === star : undefined}
+          className={`text-2xl leading-none ${
+            star <= safeRating ? "text-yellow-400" : "text-gray-300"
+          } ${interactive ? "cursor-pointer" : "cursor-default"}`}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default function ReviewSection({ itemId, itemType }: Props) {
+  const user = useSelector((state: any) => state.user.user);
+
+  // Logged-in user's name, or "Guest User" if nobody is logged in
+  const displayName =
+    `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Guest User";
+
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [rating, setRating] = useState(5);
+  const [rating, setRating] = useState<number>(5);
   const [text, setText] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [sort, setSort] = useState("newest");
   const [filterRating, setFilterRating] = useState("");
 
-  // =========================
-  // LOAD REVIEWS
-  // =========================
-  const loadReviews = async () => {
+  const loadReviews = useCallback(async () => {
+    if (!itemId) return;
+
     try {
-      let url = `http://localhost:8080/reviews/${itemId}?sort=${sort}`;
+      const params = new URLSearchParams({ sort });
 
       if (filterRating) {
-        url += `&rating=${filterRating}`;
+        params.set("rating", filterRating);
       }
 
-      const response = await fetch(url);
+      const response = await fetch(
+        `${API_URL}/reviews/${encodeURIComponent(itemId)}?${params.toString()}`
+      );
 
-      if (response.ok) {
-        const data = await response.json();
-        setReviews(data);
-      } else {
-        console.error(
-          "Failed to load reviews:",
-          await response.text()
-        );
+      if (!response.ok) {
+        const errorDetails = await response.text();
+        console.error("Reviews API error:", response.status, errorDetails);
+        throw new Error(`Could not load reviews: ${response.status}`);
       }
+
+      const data: unknown = await response.json();
+      const list = Array.isArray(data) ? (data as Review[]) : [];
+
+      // Reviews removed by a moderator are never shown
+      setReviews(list.filter((review) => !review.removed));
     } catch (error) {
-      console.error("Error loading reviews:", error);
-    }
-  };
-
-  useEffect(() => {
-    if (itemId) {
-      loadReviews();
+      console.error("Failed to load reviews:", error);
     }
   }, [itemId, sort, filterRating]);
 
-  // =========================
-  // PHOTO UPLOAD
-  // =========================
-  const handlePhotoUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
+  useEffect(() => {
+    void loadReviews();
+  }, [loadReviews]);
 
-    if (!file) {
-      return;
-    }
+  const handlePhotoUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      alert("Only image files are allowed.");
-      e.target.value = "";
+      alert("Please select an image file.");
+      event.target.value = "";
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
       alert("Image size must be less than 5 MB.");
-      e.target.value = "";
+      event.target.value = "";
       return;
     }
 
@@ -99,289 +139,187 @@ export default function ReviewSection({
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch(
-        "http://localhost:8080/reviews/upload-photo",
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      const response = await fetch(`${API_URL}/reviews/upload-photo`, {
+        method: "POST",
+        body: formData,
+      });
 
-      if (response.ok) {
-        const uploadedPhotoUrl = await response.text();
-
-        setPhotoUrl(uploadedPhotoUrl);
-
-        console.log("Photo uploaded successfully");
-      } else {
-        const errorText = await response.text();
-
-        console.error(
-          "Photo upload failed:",
-          errorText
-        );
-
-        alert("Failed to upload photo.");
+      if (!response.ok) {
+        throw new Error("Photo upload failed.");
       }
-    } catch (error) {
-      console.error(
-        "Photo upload error:",
-        error
-      );
 
-      alert(
-        "Something went wrong while uploading the photo."
-      );
+      const uploadedUrl = (await response.text()).trim();
+      setPhotoUrl(uploadedUrl);
+      alert("Photo uploaded successfully.");
+    } catch (error) {
+      console.error("Photo upload failed:", error);
+      alert("Photo upload failed. Check that the backend is running.");
     } finally {
       setUploadingPhoto(false);
     }
   };
 
-  // =========================
-  // SUBMIT REVIEW
-  // =========================
   const submitReview = async () => {
     if (!text.trim()) {
       alert("Please write a review.");
       return;
     }
 
-    // Store the selected rating before submitting.
-    // This makes sure the exact selected value is sent.
-    const submittedRating = rating;
-
-    console.log(
-      "Submitting rating:",
-      submittedRating
-    );
-
-    try {
-      const response = await fetch(
-        "http://localhost:8080/reviews",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            itemId: itemId,
-            itemType: itemType,
-            userName: "Guest User",
-            rating: submittedRating,
-            reviewText: text,
-            photoUrl: photoUrl,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        const savedReview = await response.json();
-
-        console.log(
-          "Submitted rating:",
-          submittedRating
-        );
-
-        console.log(
-          "Saved review:",
-          savedReview
-        );
-
-        alert("Review submitted successfully!");
-
-        setText("");
-        setPhotoUrl("");
-
-        // Reload reviews while the selected rating
-        // is still available.
-        await loadReviews();
-
-        // Reset the form to 5 stars after submission.
-        setRating(5);
-      } else {
-        const errorText = await response.text();
-
-        console.error(
-          "Review submission failed:",
-          errorText
-        );
-
-        alert("Failed to submit review.");
-      }
-    } catch (error) {
-      console.error(
-        "Error submitting review:",
-        error
-      );
-
-      alert(
-        "Something went wrong while submitting the review."
-      );
-    }
-  };
-
-  // =========================
-  // HELPFUL
-  // =========================
-  const helpful = async (id: string) => {
-    try {
-      const response = await fetch(
-        `http://localhost:8080/reviews/${id}/helpful`,
-        {
-          method: "PUT",
-        }
-      );
-
-      if (response.ok) {
-        await loadReviews();
-      }
-    } catch (error) {
-      console.error(
-        "Helpful error:",
-        error
-      );
-    }
-  };
-
-  // =========================
-  // FLAG REVIEW
-  // =========================
-  const flagReview = async (id: string) => {
-    try {
-      const response = await fetch(
-        `http://localhost:8080/reviews/${id}/flag`,
-        {
-          method: "PUT",
-        }
-      );
-
-      if (response.ok) {
-        alert(
-          "Review has been flagged for moderation."
-        );
-
-        await loadReviews();
-      }
-    } catch (error) {
-      console.error(
-        "Flag error:",
-        error
-      );
-    }
-  };
-
-  // =========================
-  // REPLY
-  // =========================
-  const reply = async (id: string) => {
-    const replyText = prompt(
-      "Write your reply:"
-    );
-
-    if (!replyText || !replyText.trim()) {
+    if (rating < 1 || rating > 5) {
+      alert("Please select a rating from 1 to 5 stars.");
       return;
     }
 
+    if (submitting || uploadingPhoto) return;
+
+    setSubmitting(true);
+
+    try {
+      const reviewToSubmit = {
+        itemId,
+        itemType,
+        userName: displayName,
+        rating: Number(rating),
+        reviewText: text.trim(),
+        photoUrl: photoUrl || null,
+      };
+
+      const response = await fetch(`${API_URL}/reviews`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(reviewToSubmit),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const savedReview: Review = await response.json();
+
+      if (Number(savedReview.rating) !== rating) {
+        alert(
+          `The selected rating was ${rating}, but the backend returned ${savedReview.rating}.`
+        );
+        return;
+      }
+
+      alert("Review submitted successfully.");
+
+      setText("");
+      setPhotoUrl("");
+      setRating(5);
+
+      await loadReviews();
+    } catch (error) {
+      console.error("Review submission failed:", error);
+      alert("Failed to submit review. Check the backend and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const helpful = async (id: string) => {
     try {
       const response = await fetch(
-        `http://localhost:8080/reviews/${id}/reply`,
+        `${API_URL}/reviews/${encodeURIComponent(id)}/helpful`,
+        { method: "PUT" }
+      );
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      await loadReviews();
+    } catch (error) {
+      console.error("Helpful action failed:", error);
+      alert("Could not mark the review as helpful.");
+    }
+  };
+
+  const flagReview = async (id: string) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/reviews/${encodeURIComponent(id)}/flag`,
+        { method: "PUT" }
+      );
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      alert("Review flagged for moderation.");
+      await loadReviews();
+    } catch (error) {
+      console.error("Flag action failed:", error);
+      alert("Could not flag the review.");
+    }
+  };
+
+  const reply = async (id: string) => {
+    const replyText = prompt("Write your reply:");
+
+    if (!replyText?.trim()) return;
+
+    try {
+      const response = await fetch(
+        `${API_URL}/reviews/${encodeURIComponent(id)}/reply`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            userName: "Guest User",
-            text: replyText,
+            userName: displayName,
+            text: replyText.trim(),
           }),
         }
       );
 
-      if (response.ok) {
-        await loadReviews();
-      } else {
-        console.error(
-          "Reply failed:",
-          await response.text()
-        );
+      if (!response.ok) {
+        throw new Error(await response.text());
       }
+
+      await loadReviews();
     } catch (error) {
-      console.error(
-        "Reply error:",
-        error
-      );
+      console.error("Reply failed:", error);
+      alert("Failed to submit reply.");
     }
   };
 
   return (
     <section className="mt-10">
+      <h2 className="mb-2 text-2xl font-bold">Reviews &amp; Ratings</h2>
 
-      {/* HEADER */}
-      <h2 className="text-2xl font-bold mb-2">
-        Reviews & Ratings
-      </h2>
-
-      <p className="text-gray-600 mb-6">
+      <p className="mb-6 text-gray-600">
         See what other travelers have to say.
       </p>
 
-      {/* =========================
-          WRITE REVIEW
-      ========================= */}
-      <div className="bg-white border rounded-xl p-5 mb-8">
+      <div className="mb-8 rounded-xl border bg-white p-5">
+        <h3 className="mb-1 text-lg font-semibold">Write a Review</h3>
+        <p className="mb-4 text-sm text-gray-500">Posting as {displayName}</p>
 
-        <h3 className="text-lg font-semibold mb-4">
-          Write a Review
-        </h3>
+        <RatingStars
+          value={rating}
+          interactive
+          onChange={(selectedRating) => setRating(selectedRating)}
+        />
 
-        {/* STAR RATING */}
-        <div className="flex gap-1 mb-4">
-
-          {[1, 2, 3, 4, 5].map((star) => (
-            <button
-              key={star}
-              type="button"
-              onClick={() => {
-                console.log(
-                  "Selected star:",
-                  star
-                );
-
-                setRating(star);
-              }}
-              className={`text-3xl ${
-                star <= rating
-                  ? "text-yellow-400"
-                  : "text-gray-300"
-              }`}
-              aria-label={`${star} star rating`}
-            >
-              ★
-            </button>
-          ))}
-
-        </div>
-
-        {/* CURRENT RATING */}
-        <p className="text-sm text-gray-600 mb-3">
+        <p className="mb-3 mt-2 text-sm text-gray-600" aria-live="polite">
           Selected rating: {rating} / 5
         </p>
 
-        {/* REVIEW TEXT */}
         <textarea
           value={text}
-          onChange={(e) =>
-            setText(e.target.value)
-          }
+          onChange={(event) => setText(event.target.value)}
           placeholder="Share your experience..."
-          className="w-full border rounded-lg p-3 min-h-28"
+          className="min-h-28 w-full rounded-lg border p-3"
           rows={4}
         />
 
-        {/* PHOTO UPLOAD */}
         <div className="mt-4">
-
-          <label className="block text-sm font-medium mb-2">
+          <label className="mb-2 block text-sm font-medium">
             Upload Photo (optional)
           </label>
 
@@ -389,262 +327,153 @@ export default function ReviewSection({
             type="file"
             accept="image/*"
             onChange={handlePhotoUpload}
-            className="w-full border rounded-lg p-3"
+            className="w-full rounded-lg border p-3"
+            disabled={uploadingPhoto || submitting}
           />
 
           {uploadingPhoto && (
-            <p className="text-sm text-blue-600 mt-2">
-              Uploading photo...
-            </p>
+            <p className="mt-2 text-sm text-blue-600">Uploading photo...</p>
           )}
 
           {photoUrl && (
             <div className="mt-3">
-
-              <p className="text-sm text-green-600 mb-2">
-                ✓ Photo uploaded
+              <p className="mb-2 text-sm text-green-600">
+                Photo uploaded successfully.
               </p>
 
               <img
                 src={photoUrl}
-                alt="Selected review photo"
-                className="w-48 h-32 object-cover rounded-lg border"
+                alt="Review upload"
+                className="h-32 w-48 rounded-lg border object-cover"
               />
-
             </div>
           )}
-
         </div>
 
-        {/* SUBMIT REVIEW */}
         <button
           type="button"
           onClick={submitReview}
-          className="mt-4 bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700"
+          disabled={submitting || uploadingPhoto}
+          className="mt-4 rounded-lg bg-blue-600 px-5 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
         >
-          Submit Review
+          {submitting ? "Submitting..." : "Submit Review"}
         </button>
-
       </div>
 
-      {/* =========================
-          SORT AND FILTER
-      ========================= */}
-      <div className="flex flex-wrap gap-3 mb-5">
-
-        {/* SORT */}
+      <div className="mb-5 flex flex-wrap gap-3">
         <select
           value={sort}
-          onChange={(e) =>
-            setSort(e.target.value)
-          }
-          className="border rounded-lg p-2"
+          onChange={(event) => setSort(event.target.value)}
+          className="rounded-lg border p-2"
+          aria-label="Sort reviews"
         >
-          <option value="newest">
-            Newest
-          </option>
-
-          <option value="highest">
-            Highest Rated
-          </option>
-
-          <option value="helpful">
-            Most Helpful
-          </option>
+          <option value="newest">Newest</option>
+          <option value="highest">Highest Rated</option>
+          <option value="helpful">Most Helpful</option>
         </select>
 
-        {/* RATING FILTER */}
         <select
           value={filterRating}
-          onChange={(e) =>
-            setFilterRating(e.target.value)
-          }
-          className="border rounded-lg p-2"
+          onChange={(event) => setFilterRating(event.target.value)}
+          className="rounded-lg border p-2"
+          aria-label="Filter by rating"
         >
-          <option value="">
-            All Ratings
-          </option>
-
-          <option value="5">
-            5 Stars
-          </option>
-
-          <option value="4">
-            4 Stars
-          </option>
-
-          <option value="3">
-            3 Stars
-          </option>
-
-          <option value="2">
-            2 Stars
-          </option>
-
-          <option value="1">
-            1 Star
-          </option>
+          <option value="">All Ratings</option>
+          <option value="5">5 Stars</option>
+          <option value="4">4 Stars</option>
+          <option value="3">3 Stars</option>
+          <option value="2">2 Stars</option>
+          <option value="1">1 Star</option>
         </select>
-
       </div>
 
-      {/* =========================
-          REVIEWS
-      ========================= */}
       <div className="space-y-5">
-
         {reviews.length === 0 && (
-          <div className="bg-gray-50 p-6 rounded-xl">
+          <div className="rounded-xl bg-gray-50 p-6">
             No reviews yet. Be the first to review!
           </div>
         )}
 
-        {reviews.map((review) => (
+        {reviews.map((review) => {
+          const reviewRating = Math.max(
+            0,
+            Math.min(5, Number(review.rating) || 0)
+          );
 
-          <div
-            key={review.id}
-            className="border rounded-xl p-5 bg-white"
-          >
+          return (
+            <div key={review.id} className="rounded-xl border bg-white p-5">
+              <div className="flex justify-between gap-3">
+                <div>
+                  <p className="font-semibold">
+                    {review.userName || "Guest User"}
+                  </p>
 
-            {/* USER + RATING */}
-            <div className="flex justify-between">
+                  <RatingStars value={reviewRating} />
 
-              <div>
-
-                <p className="font-semibold">
-                  {review.userName}
-                </p>
-
-                {/* DISPLAY RATING */}
-                <div className="text-yellow-400">
-
-                  {"★".repeat(
-                    Math.max(
-                      0,
-                      Math.min(
-                        5,
-                        Number(review.rating)
-                      )
-                    )
-                  )}
-
-                  <span className="text-gray-300">
-
-                    {"★".repeat(
-                      Math.max(
-                        0,
-                        5 -
-                          Math.max(
-                            0,
-                            Math.min(
-                              5,
-                              Number(review.rating)
-                            )
-                          )
-                      )
-                    )}
-
-                  </span>
-
+                  <p className="text-sm text-gray-500">
+                    Rating: {reviewRating} / 5
+                  </p>
                 </div>
 
-                <p className="text-sm text-gray-500">
-                  Rating: {review.rating} / 5
-                </p>
-
+                {review.flagged ? (
+                  <span className="text-sm text-orange-600">
+                    Flagged – under review
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => flagReview(review.id)}
+                    className="text-sm text-red-500"
+                  >
+                    Flag
+                  </button>
+                )}
               </div>
 
-              {/* FLAG */}
-              <button
-                type="button"
-                onClick={() =>
-                  flagReview(review.id)
-                }
-                className="text-sm text-red-500"
-              >
-                🚩 Flag
-              </button>
+              <p className="mt-3 text-gray-700">{review.reviewText}</p>
 
-            </div>
-
-            {/* REVIEW TEXT */}
-            <p className="mt-3 text-gray-700">
-              {review.reviewText}
-            </p>
-
-            {/* PHOTO */}
-            {review.photoUrl && (
-              <img
-                src={review.photoUrl}
-                alt="Review"
-                className="mt-4 w-48 h-32 object-cover rounded-lg"
-              />
-            )}
-
-            {/* ACTIONS */}
-            <div className="flex gap-4 mt-4 text-sm">
-
-              <button
-                type="button"
-                onClick={() =>
-                  helpful(review.id)
-                }
-                className="text-blue-600"
-              >
-                👍 Helpful (
-                {review.helpfulCount}
-                )
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  reply(review.id)
-                }
-                className="text-blue-600"
-              >
-                💬 Reply
-              </button>
-
-            </div>
-
-            {/* REPLIES */}
-            {review.replies &&
-              review.replies.length > 0 && (
-
-                <div className="mt-4 ml-6 border-l-2 pl-4">
-
-                  {review.replies.map(
-                    (replyItem, index) => (
-
-                      <div
-                        key={index}
-                        className="mb-3"
-                      >
-
-                        <p className="font-semibold text-sm">
-                          {replyItem.userName}
-                        </p>
-
-                        <p className="text-sm text-gray-600">
-                          {replyItem.text}
-                        </p>
-
-                      </div>
-
-                    )
-                  )}
-
-                </div>
-
+              {review.photoUrl && (
+                <img
+                  src={review.photoUrl}
+                  alt="Review"
+                  className="mt-4 h-32 w-48 rounded-lg object-cover"
+                />
               )}
 
-          </div>
+              <div className="mt-4 flex gap-4 text-sm">
+                <button
+                  type="button"
+                  onClick={() => helpful(review.id)}
+                  className="text-blue-600"
+                >
+                  Helpful ({review.helpfulCount ?? 0})
+                </button>
 
-        ))}
+                <button
+                  type="button"
+                  onClick={() => reply(review.id)}
+                  className="text-blue-600"
+                >
+                  Reply
+                </button>
+              </div>
 
+              {review.replies?.length > 0 && (
+                <div className="ml-6 mt-4 border-l-2 pl-4">
+                  {review.replies.map((replyItem, index) => (
+                    <div key={index} className="mb-3">
+                      <p className="text-sm font-semibold">
+                        {replyItem.userName}
+                      </p>
+                      <p className="text-sm text-gray-600">{replyItem.text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-
     </section>
   );
 }

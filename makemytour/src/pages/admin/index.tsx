@@ -35,8 +35,8 @@ const mockFlights = [
   {
     _id: "1",
     flightName: "AirOne 101",
-    from: "New York",
-    to: "London",
+    from: "Mumbai",
+    to: "Paris",
     departureTime: "2023-07-01T08:00",
     arrivalTime: "2023-07-01T20:00",
     price: 500,
@@ -45,8 +45,8 @@ const mockFlights = [
   {
     _id: "2",
     flightName: "SkyHigh 202",
-    from: "Paris",
-    to: "Tokyo",
+    from: "Delhi",
+    to: "Bali,Indonesia",
     departureTime: "2023-07-02T10:00",
     arrivalTime: "2023-07-03T06:00",
     price: 800,
@@ -55,8 +55,8 @@ const mockFlights = [
   {
     _id: "3",
     flightName: "EagleWings 303",
-    from: "Los Angeles",
-    to: "Sydney",
+    from: "Pune",
+    to: "Paris",
     departureTime: "2023-07-03T22:00",
     arrivalTime: "2023-07-05T06:00",
     price: 1200,
@@ -84,7 +84,7 @@ const mockHotels = [
   {
     _id: "3",
     hotelName: "Mountain Lodge",
-    location: "Aspen, Colorado",
+    location: "Mumbai,India",
     pricePerNight: 250,
     availableRooms: 30,
     amenities: "Ski-in/Ski-out, Fireplace, Hot Tub, Restaurant",

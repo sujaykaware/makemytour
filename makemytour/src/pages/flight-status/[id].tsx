@@ -51,6 +51,7 @@ export default function FlightStatusPage() {
       </div>
     );
   }
+  const isDelayed = flight.status?.startsWith("Delayed");
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
@@ -105,20 +106,19 @@ export default function FlightStatusPage() {
             </p>
 
             <p
-              className={`text-2xl font-bold ${
-                flight.status === "Delayed"
+              className={`text-2xl font-bold ${isDelayed
                   ? "text-red-600"
                   : flight.status === "Boarding"
-                  ? "text-orange-500"
-                  : "text-green-600"
-              }`}
+                    ? "text-orange-500"
+                    : "text-green-600"
+                }`}
             >
               {flight.status || "On Time"}
             </p>
 
           </div>
 
-          {flight.status === "Delayed" && (
+          {isDelayed && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
 
               <p className="font-semibold text-red-700">

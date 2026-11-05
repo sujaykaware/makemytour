@@ -185,23 +185,45 @@ export const edithotel = async (
   }
 };
 
-export const handleflightbooking = async (userId, flightId, seats, price) => {
+export const handleflightbooking = async (
+  userId,
+  flightId,
+  seats,
+  price,
+  seatNumbers
+) => {
   try {
-    const url = `${BACKEND_URL}/booking/flight?userId=${userId}&flightId=${flightId}&seats=${seats}&price=${price}`;
-    const res = await axios.post(url);
-    const data = res.data;
-    return data;
+    const url = `${BACKEND_URL}/booking/flight`;
+
+    const res = await axios.post(url, null, {
+      params: {
+        userId,
+        flightId,
+        seats,
+        price,
+        seatNumbers: (seatNumbers || []).join(","),
+      },
+    });
+
+    return res.data;
   } catch (error) {
-    console.log(error);
+    console.log("Flight booking error:", error);
+    throw error;
   }
 };
 
-export const handlehotelbooking = async (userId, hotelId, rooms, price) => {
+export const handlehotelbooking = async (
+  userId,
+  hotelId,
+  rooms,
+  price,
+  roomSelections = ""
+) => {
   try {
-    const url = `${BACKEND_URL}/booking/flight?userId=${userId}&hotelId=${hotelId}&rooms=${rooms}&price=${price}`;
-    const res = await axios.post(url);
-    const data = res.data;
-    return data;
+    const res = await axios.post(`${BACKEND_URL}/booking/hotel`, null, {
+      params: { userId, hotelId, rooms, price, roomSelections },
+    });
+    return res.data;
   } catch (error) {
     console.log(error);
   }
@@ -229,51 +251,31 @@ export const getAllFlightStatuses = async () => {
 };
 export const getDynamicPrice = async (
   flightId,
+  userId,
   basePrice,
-  demand = 50,
-  peakSeason = false
+  demand,
+  peakSeason
 ) => {
-  try {
-    const res = await axios.get(
-      `${BACKEND_URL}/pricing/${flightId}`,
-      {
-        params: {
-          basePrice,
-          demand,
-          peakSeason,
-        },
-      }
-    );
-
-    return res.data;
-  } catch (error) {
-    console.log("Dynamic pricing error:", error);
-    return null;
-  }
+  const res = await fetch(
+    `http://localhost:8080/pricing/${encodeURIComponent(flightId)}?userId=${encodeURIComponent(userId)}&basePrice=${basePrice}&demand=${demand}&peakSeason=${peakSeason}`
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 };
 
 export const freezePrice = async (
   flightId,
-  price,
-  minutes = 15
+  userId,
+  basePrice,
+  demand,
+  peakSeason
 ) => {
-  try {
-    const res = await axios.post(
-      `${BACKEND_URL}/pricing/${flightId}/freeze`,
-      null,
-      {
-        params: {
-          price,
-          minutes,
-        },
-      }
-    );
-
-    return res.data;
-  } catch (error) {
-    console.log("Price freeze error:", error);
-    return null;
-  }
+  const res = await fetch(
+    `http://localhost:8080/pricing/${encodeURIComponent(flightId)}/freeze?userId=${encodeURIComponent(userId)}&basePrice=${basePrice}&demand=${demand}&peakSeason=${peakSeason}`,
+    { method: "POST" }
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 };
 
 export const getPriceHistory = async (flightId) => {
@@ -316,6 +318,24 @@ export const calculateRefund = async (
     return null;
   }
 };
+
+export const cancelBooking = async (userId, bookingId, reason) => {
+  try {
+    const res = await axios.post(
+      `${BACKEND_URL}/cancellation/cancel/${userId}/${bookingId}`,
+      null,
+      {
+        params: { reason },
+      }
+    );
+
+    return res.data;
+  } catch (error) {
+    console.log("Booking cancellation error:", error);
+    throw error;
+  }
+};
+
 export const getRefundStatus = async (refundId) => {
   try {
     const res = await axios.get(
@@ -325,9 +345,12 @@ export const getRefundStatus = async (refundId) => {
     return res.data;
   } catch (error) {
     console.log("Refund status error:", error);
-    return null;
+    throw error;
   }
 };
+
+
+
 // ================================
 // SEAT SELECTION
 // ================================
@@ -405,6 +428,31 @@ export const selectRoom = async (roomId) => {
     return res.data;
   } catch (error) {
     console.log("Room selection error:", error);
+    return null;
+  }
+};
+// ================================
+// SAVED PREFERENCES
+// ================================
+
+export const getPreferences = async (userId) => {
+  try {
+    const res = await axios.get(`${BACKEND_URL}/preferences/${userId}`);
+    return res.data;
+  } catch (error) {
+    console.log("Preferences error:", error);
+    return null;
+  }
+};
+
+export const savePreferences = async (userId, { seatType, roomType }) => {
+  try {
+    const res = await axios.put(`${BACKEND_URL}/preferences/${userId}`, null, {
+      params: { seatType, roomType },
+    });
+    return res.data;
+  } catch (error) {
+    console.log("Save preferences error:", error);
     return null;
   }
 };

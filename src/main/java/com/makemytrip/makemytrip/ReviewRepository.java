@@ -7,5 +7,6 @@ import java.util.List;
 public interface ReviewRepository extends MongoRepository<Review, String> {
 
     List<Review> findByItemIdAndRemovedFalse(String itemId);
+    List<Review> findByFlaggedTrueAndRemovedFalse();
 
 }

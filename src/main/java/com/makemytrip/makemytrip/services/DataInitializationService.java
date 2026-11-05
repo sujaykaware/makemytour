@@ -74,7 +74,7 @@ public class DataInitializationService implements CommandLineRunner {
         Hotel parisFrance = new Hotel();
         parisFrance.setId("6ab00cfb4b51786a26a0cdd7");
         parisFrance.sethotelName("Hyatt Regency");
-        parisFrance.setLocation("Paris,France");
+        parisFrance.setLocation("Egypt");
         parisFrance.setPricePerNight(4000);
         parisFrance.setAvailableRooms(8);
         parisFrance.setamenities("WiFi, Gym, Breakfast");
@@ -111,8 +111,8 @@ public class DataInitializationService implements CommandLineRunner {
 
         Flight flight1 = createFlight(
                 "IndiGo 6E-101",
-                "Mumbai",
-                "Delhi",
+                "Paris",
+                "Tokyo",
                 "08:00",
                 "10:10",
                 3500,
@@ -121,8 +121,8 @@ public class DataInitializationService implements CommandLineRunner {
 
         Flight flight2 = createFlight(
                 "Air India AI-202",
-                "Delhi",
-                "Mumbai",
+                "Tokyo",
+                "New York",
                 "11:30",
                 "13:40",
                 4200,
@@ -131,8 +131,8 @@ public class DataInitializationService implements CommandLineRunner {
 
         Flight flight3 = createFlight(
                 "IndiGo 6E-303",
-                "Mumbai",
-                "Bangalore",
+                "Tokyo",
+                "London",
                 "14:00",
                 "15:45",
                 3800,
@@ -141,8 +141,8 @@ public class DataInitializationService implements CommandLineRunner {
 
         Flight flight4 = createFlight(
                 "Vistara UK-404",
-                "Pune",
-                "Delhi",
+                "Paris",
+                "Bali,Indonesia",
                 "16:30",
                 "18:40",
                 4500,
@@ -151,8 +151,8 @@ public class DataInitializationService implements CommandLineRunner {
 
         Flight flight5 = createFlight(
                 "IndiGo 6E-505",
-                "Delhi",
-                "Bangalore",
+                "London",
+                "New York",
                 "19:00",
                 "21:45",
                 3900,
@@ -161,8 +161,8 @@ public class DataInitializationService implements CommandLineRunner {
 
         Flight flight6 = createFlight(
                 "Air India AI-606",
-                "Mumbai",
-                "Goa",
+                "Tokyo",
+                "London",
                 "09:30",
                 "10:45",
                 2800,

@@ -1,5 +1,5 @@
 import React from "react";
-import SignupDialog from "./SignupDialog";
+import SignupDialog from "./ui/SignupDialog";
 import { LogOut, Plane, User } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -76,12 +76,9 @@ const Navbar = () => {
           ) : (
             <SignupDialog
               trigger={
-                <Button
-                  variant="outline"
-                  className="bg-blue-600  text-white hover:bg-blue-700"
-                >
+                <span className="inline-flex bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-md cursor-pointer">
                   Sign Up
-                </Button>
+                </span>
               }
             />
           )}

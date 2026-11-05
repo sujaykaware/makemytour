@@ -1,202 +1,306 @@
 package com.makemytrip.makemytrip.controllers;
 
+import com.makemytrip.makemytrip.models.Seat;
+import com.makemytrip.makemytrip.repositories.SeatRepository;
+import com.makemytrip.makemytrip.models.Users;
+import com.makemytrip.makemytrip.models.Users.Booking;
+import com.makemytrip.makemytrip.models.Flight;
+import com.makemytrip.makemytrip.models.Hotel;
+import com.makemytrip.makemytrip.repositories.UserRepository;
+import com.makemytrip.makemytrip.repositories.FlightRepository;
+import com.makemytrip.makemytrip.repositories.HotelRepository;
+import com.makemytrip.makemytrip.repositories.RoomRepository;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
 
 @RestController
 @RequestMapping("/cancellation")
 @CrossOrigin
 public class CancellationController {
 
-    // Stores refund status for each refund
-    private final Map<String, Map<String, Object>> refundStatuses =
-            new ConcurrentHashMap<>();
+        @Autowired
+        private UserRepository userRepository;
 
-    @PostMapping("/calculate-refund")
-    public Map<String, Object> calculateRefund(
-            @RequestParam double bookingAmount,
-            @RequestParam String reservationTime,
-            @RequestParam String reason) {
+        @Autowired
+        private FlightRepository flightRepository;
 
-        Map<String, Object> response = new HashMap<>();
+        @Autowired
+        private HotelRepository hotelRepository;
 
-        try {
+        @Autowired
+        private SeatRepository seatRepository;
+        @Autowired
+        private RoomRepository roomRepository;
 
-            LocalDateTime reservationDateTime =
-                    LocalDateTime.parse(reservationTime);
+        // Demo timings for the refund tracker
+        private static final long PROCESSED_AFTER_SECONDS = 60;
+        private static final long COMPLETED_AFTER_SECONDS = 180;
 
-            LocalDateTime currentTime = LocalDateTime.now();
+        private static final List<String> VALID_REASONS = Arrays.asList(
+                        "Travel plan changed",
+                        "Found a better price",
+                        "Change in schedule",
+                        "Booked by mistake",
+                        "Personal reasons",
+                        "Other");
 
-            long hoursSinceReservation =
-                    Duration.between(
-                            reservationDateTime,
-                            currentTime
-                    ).toHours();
+        // Works out the refund stage from the time since cancellation
+        private String statusFor(Booking booking) {
 
-            double refundPercentage;
-            String policyMessage;
+                if (booking.getCancelledAt() == null) {
+                        return booking.getRefundStatus();
+                }
 
-            if (hoursSinceReservation <= 24) {
+                long seconds = Duration.between(
+                                booking.getCancelledAt(), LocalDateTime.now()).getSeconds();
 
-                refundPercentage = 50;
+                if (seconds >= COMPLETED_AFTER_SECONDS) {
+                        return "Completed";
+                }
 
-                policyMessage =
-                        "Cancellation within 24 hours: 50% refund";
+                if (seconds >= PROCESSED_AFTER_SECONDS) {
+                        return "Processed";
+                }
 
-            } else {
-
-                refundPercentage = 25;
-
-                policyMessage =
-                        "Cancellation after 24 hours: 25% partial refund";
-            }
-
-            double refundAmount =
-                    bookingAmount * refundPercentage / 100;
-
-            // Create unique refund ID
-            String refundId =
-                    "REF-" + System.currentTimeMillis();
-
-            // Create refund status information
-            Map<String, Object> refundStatus =
-                    new HashMap<>();
-
-            refundStatus.put("status", "Pending");
-            refundStatus.put(
-                    "createdAt",
-                    System.currentTimeMillis()
-            );
-
-            refundStatuses.put(
-                    refundId,
-                    refundStatus
-            );
-
-            response.put(
-                    "refundId",
-                    refundId
-            );
-
-            response.put(
-                    "bookingAmount",
-                    bookingAmount
-            );
-
-            response.put(
-                    "refundPercentage",
-                    refundPercentage
-            );
-
-            response.put(
-                    "refundAmount",
-                    refundAmount
-            );
-
-            response.put(
-                    "reason",
-                    reason
-            );
-
-            response.put(
-                    "policyMessage",
-                    policyMessage
-            );
-
-            response.put(
-                    "status",
-                    "Pending"
-            );
-
-            response.put(
-                    "expectedTimeline",
-                    "Refund expected within 5-7 business days"
-            );
-
-            return response;
-
-        } catch (Exception e) {
-
-            response.put(
-                    "error",
-                    "Invalid reservation time"
-            );
-
-            return response;
-        }
-    }
-
-    // Check current refund status
-    @GetMapping("/status/{refundId}")
-    public Map<String, Object> getRefundStatus(
-            @PathVariable String refundId) {
-
-        Map<String, Object> refund =
-                refundStatuses.get(refundId);
-
-        if (refund == null) {
-
-            Map<String, Object> error =
-                    new HashMap<>();
-
-            error.put(
-                    "error",
-                    "Refund not found"
-            );
-
-            return error;
+                return "Pending";
         }
 
-        long createdAt =
-                (long) refund.get("createdAt");
+        private String timelineFor(String status) {
 
-        long elapsedSeconds =
-                (System.currentTimeMillis() - createdAt)
-                        / 1000;
+                if ("Completed".equals(status)) {
+                        return "Refund completed. The amount has been credited to your original payment method";
+                }
 
-        String status;
+                if ("Processed".equals(status)) {
+                        return "Refund processed. It will reach your account within 2-3 business days";
+                }
 
-        /*
-         * Demo refund progression:
-         *
-         * 0-10 seconds   → Pending
-         * 10-20 seconds  → Processed
-         * 20+ seconds    → Completed
-         */
-
-        if (elapsedSeconds < 10) {
-
-            status = "Pending";
-
-        } else if (elapsedSeconds < 20) {
-
-            status = "Processed";
-
-        } else {
-
-            status = "Completed";
+                return "Refund expected within 5-7 business days";
         }
 
-        refund.put(
-                "status",
-                status
-        );
+        // Cancel booking and calculate refund
+        @PostMapping("/cancel/{userId}/{bookingId}")
+        public Map<String, Object> cancelBooking(
+                        @PathVariable String userId,
+                        @PathVariable String bookingId,
+                        @RequestParam String reason) {
 
-        refund.put(
-                "elapsedSeconds",
-                elapsedSeconds
-        );
+                Map<String, Object> response = new HashMap<>();
 
-        refund.put(
-                "expectedTimeline",
-                "Refund expected within 5-7 business days"
-        );
+                Optional<Users> usersOptional = userRepository.findById(userId);
 
-        return refund;
-    }
+                if (!usersOptional.isPresent()) {
+                        response.put("error", "User not found");
+                        return response;
+                }
+
+                Users user = usersOptional.get();
+
+                Booking booking = user.getBookings().stream()
+                                .filter(b -> bookingId.equals(b.getBookingId()))
+                                .findFirst()
+                                .orElse(null);
+
+                if (booking == null) {
+                        response.put("error", "Booking not found");
+                        return response;
+                }
+
+                if ("Cancelled".equalsIgnoreCase(booking.getStatus())) {
+                        response.put("error", "This booking is already cancelled");
+                        return response;
+                }
+
+                if (!VALID_REASONS.contains(reason)) {
+                        response.put("error", "Please select a valid cancellation reason");
+                        return response;
+                }
+
+                if (booking.getCreatedAt() == null) {
+                        response.put("error",
+                                        "This older booking has no creation timestamp. Refund cannot be calculated accurately.");
+                        return response;
+                }
+
+                LocalDateTime now = LocalDateTime.now();
+
+                if (booking.getCreatedAt().isAfter(now)) {
+                        response.put("error", "Invalid booking creation time");
+                        return response;
+                }
+
+                // Calculate refund according to cancellation policy
+                long hoursSinceBooking = Duration.between(
+                                booking.getCreatedAt(), now).toHours();
+
+                int refundPercentage;
+                String policyMessage;
+
+                if (hoursSinceBooking <= 24) {
+                        refundPercentage = 50;
+                        policyMessage = "Cancellation within 24 hours: 50% refund";
+                } else {
+                        refundPercentage = 25;
+                        policyMessage = "Cancellation after 24 hours: 25% partial refund";
+                }
+
+                double refundAmount = Math.round(
+                                booking.getTotalPrice() * refundPercentage) / 100.0;
+
+                // Restore flight seats or hotel rooms
+                if ("Flight".equalsIgnoreCase(booking.getType())) {
+
+                        Optional<Flight> flightOptional = flightRepository.findById(booking.getItemId());
+
+                        if (!flightOptional.isPresent()) {
+                                response.put("error", "Flight not found. Booking was not cancelled.");
+                                return response;
+                        }
+
+                        Flight flight = flightOptional.get();
+
+                        flight.setAvailableSeats(
+                                        flight.getAvailableSeats() + booking.getQuantity());
+
+                        flightRepository.save(flight);
+
+                        // Restore previously booked seats
+                        if (booking.getSeatNumbers() != null
+                                        && !booking.getSeatNumbers().isEmpty()) {
+
+                                List<Seat> seatsToRestore = new ArrayList<>();
+
+                                for (String seatNumber : booking.getSeatNumbers()) {
+
+                                        Optional<Seat> seatOptional = seatRepository.findByFlightIdAndSeatNumber(
+                                                        booking.getItemId(),
+                                                        seatNumber);
+
+                                        if (seatOptional.isPresent()) {
+                                                Seat seat = seatOptional.get();
+
+                                                seat.setStatus("Available");
+
+                                                seatsToRestore.add(seat);
+                                        }
+                                }
+
+                                seatRepository.saveAll(seatsToRestore);
+                        }
+                        ;
+
+                } else if ("Hotel".equalsIgnoreCase(booking.getType())) {
+
+                        Optional<Hotel> hotelOptional = hotelRepository.findById(booking.getItemId());
+
+                        if (!hotelOptional.isPresent()) {
+                                response.put("error", "Hotel not found. Booking was not cancelled.");
+                                return response;
+                        }
+
+                        Hotel hotel = hotelOptional.get();
+
+                        hotel.setAvailableRooms(
+                                        hotel.getAvailableRooms() + booking.getQuantity());
+
+                        hotelRepository.save(hotel);
+                        // Give the booked room types back
+                        if (booking.getRoomQuantities() != null) {
+                                for (Map.Entry<String, Integer> e : booking.getRoomQuantities().entrySet()) {
+                                        roomRepository.findById(e.getKey()).ifPresent(room -> {
+                                                room.setAvailableRooms(room.getAvailableRooms() + e.getValue());
+                                                roomRepository.save(room);
+                                        });
+                                }
+                        }
+
+                } else {
+                        response.put("error", "Unsupported booking type");
+                        return response;
+                }
+
+                // Generate unique refund ID
+                String refundId = "REF-" + UUID.randomUUID();
+
+                // Update booking details
+                booking.setStatus("Cancelled");
+                booking.setCancellationReason(reason);
+                booking.setCancelledAt(now);
+
+                booking.setRefundId(refundId);
+                booking.setRefundAmount(refundAmount);
+                booking.setRefundPercentage(refundPercentage);
+                booking.setRefundStatus("Pending");
+                booking.setRefundExpectedTimeline(timelineFor("Pending"));
+
+                // Save updated booking and refund information in MongoDB
+                userRepository.save(user);
+
+                response.put("message", "Booking cancelled successfully");
+                response.put("bookingId", bookingId);
+                response.put("refundId", refundId);
+                response.put("bookingAmount", booking.getTotalPrice());
+                response.put("refundPercentage", refundPercentage);
+                response.put("refundAmount", refundAmount);
+                response.put("reason", reason);
+                response.put("policyMessage", policyMessage);
+                response.put("status", "Cancelled");
+                response.put("refundStatus", "Pending");
+                response.put("expectedTimeline", timelineFor("Pending"));
+
+                return response;
+        }
+
+        // Get refund status (moves Pending -> Processed -> Completed over time)
+        @GetMapping("/status/{refundId}")
+        public Map<String, Object> getRefundStatus(
+                        @PathVariable String refundId) {
+
+                Map<String, Object> response = new HashMap<>();
+
+                for (Users user : userRepository.findAll()) {
+
+                        if (user.getBookings() == null) {
+                                continue;
+                        }
+
+                        for (Booking booking : user.getBookings()) {
+
+                                if (refundId.equals(booking.getRefundId())) {
+
+                                        String currentStatus = statusFor(booking);
+
+                                        // Save the new stage when it changes
+                                        if (currentStatus != null
+                                                        && !currentStatus.equals(booking.getRefundStatus())) {
+
+                                                booking.setRefundStatus(currentStatus);
+                                                booking.setRefundExpectedTimeline(
+                                                                timelineFor(currentStatus));
+
+                                                userRepository.save(user);
+                                        }
+
+                                        response.put("refundId", refundId);
+                                        response.put("bookingId", booking.getBookingId());
+                                        response.put("refundAmount", booking.getRefundAmount());
+                                        response.put("refundPercentage", booking.getRefundPercentage());
+                                        response.put("reason", booking.getCancellationReason());
+                                        response.put("status", booking.getRefundStatus());
+                                        response.put("expectedTimeline",
+                                                        booking.getRefundExpectedTimeline());
+
+                                        return response;
+                                }
+                        }
+                }
+
+                response.put("error", "Refund not found");
+                return response;
+        }
 }
