@@ -88,7 +88,7 @@ const BookHotelPage = () => {
     const loadStats = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8080/reviews/${encodeURIComponent(id)}`
+          `${process.env.NEXT_PUBLIC_API_URL || "${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}"}/reviews/${encodeURIComponent(id)}`
         );
         if (!res.ok) return;
         const list = await res.json();
