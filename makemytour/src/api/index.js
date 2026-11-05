@@ -257,7 +257,7 @@ export const getDynamicPrice = async (
   peakSeason
 ) => {
   const res = await fetch(
-    `http://localhost:8080/pricing/${encodeURIComponent(flightId)}?userId=${encodeURIComponent(userId)}&basePrice=${basePrice}&demand=${demand}&peakSeason=${peakSeason}`
+    `${BACKEND_URL}/pricing/${encodeURIComponent(flightId)}?userId=${encodeURIComponent(userId)}&basePrice=${basePrice}&demand=${demand}&peakSeason=${peakSeason}`
   );
   if (!res.ok) throw new Error(await res.text());
   return res.json();
@@ -271,7 +271,7 @@ export const freezePrice = async (
   peakSeason
 ) => {
   const res = await fetch(
-    `http://localhost:8080/pricing/${encodeURIComponent(flightId)}/freeze?userId=${encodeURIComponent(userId)}&basePrice=${basePrice}&demand=${demand}&peakSeason=${peakSeason}`,
+    `${BACKEND_URL}/pricing/${encodeURIComponent(flightId)}/freeze?userId=${encodeURIComponent(userId)}&basePrice=${basePrice}&demand=${demand}&peakSeason=${peakSeason}`,
     { method: "POST" }
   );
   if (!res.ok) throw new Error(await res.text());
@@ -445,7 +445,11 @@ export const getPreferences = async (userId) => {
   }
 };
 
-export const savePreferences = async (userId, { seatType, roomType }) => {
+/**
+ * @param {any} userId
+ * @param {{ seatType?: any, roomType?: any }} [prefs]
+ */
+export const savePreferences = async (userId, { seatType, roomType } = {}) => {
   try {
     const res = await axios.put(`${BACKEND_URL}/preferences/${userId}`, null, {
       params: { seatType, roomType },
@@ -456,4 +460,3 @@ export const savePreferences = async (userId, { seatType, roomType }) => {
     return null;
   }
 };
-

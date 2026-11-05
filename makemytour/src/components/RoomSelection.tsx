@@ -114,7 +114,7 @@ export default function RoomSelection({
       }
 
       if (userId) {
-        void savePreferences(userId, { roomType: room.roomType });
+        void savePreferences(userId, { roomType: room.roomType } as any);
       }
 
       setPreferredType(room.roomType);
